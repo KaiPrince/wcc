@@ -226,10 +226,16 @@ function findThisReferences(context, statement) {
         // const { description } = this.todo;
         references.push(init.property.name);
       } else if (init.type === 'ThisExpression' && id && id.properties) {
-        // const { description } = this.todo;
+        // const { id, description } = this;
         id.properties.forEach((property) => {
           references.push(property.key.name);
         });
+      } else {
+        // TODO we are just blindly tracking anything here.
+        // everything should ideally be mapped to actual this references, to create a strong chain of direct reactivity
+        // instead of tracking any declaration as a derived tracking attr
+        // for convenience here, we push the entire declaration here, instead of the name like for direct this references (see above)
+        references.push(declaration);
       }
     });
   }
@@ -333,12 +339,34 @@ export function parseJsx(moduleURL) {
     }
 
     let newModuleContents = escodegen.generate(tree);
+    const trackingAttrs = observedAttributes.filter(attr => typeof attr === 'string');
+    // TODO ideally derivedAttrs would explicitely reference trackingAttrs
+    // and if there are no derivedAttrs, do not include the derivedGetters / derivedSetters code in the compiled output
+    const derivedAttrs = observedAttributes.filter(attr => typeof attr !== 'string');
+    const derivedGetters = derivedAttrs.map(attr => {
+      return `
+        get_${attr.id.name}(${trackingAttrs.join(',')}) {
+          console.log('@@@@@@@@@@@@@@@@@@@@ updating derivative value for => ${attr.id.name}');
+          console.log('@@@@@@@@@@@@@@@@@@@@ new derivative value is =>', ${moduleContents.slice(attr.init.start, attr.init.end)});
+          return ${moduleContents.slice(attr.init.start, attr.init.end)}
+        }
+      `;
+    }).join('\n');
+    const derivedSetters = derivedAttrs.map(attr => {
+      const name = attr.id.name;
+
+      return `
+        const old_${name} = this.get_${name}(oldValue);
+        const new_${name} = this.get_${name}(newValue);
+        this.update('${name}', old_${name}, new_${name});
+      `;
+    }).join('\n');
 
     // TODO better way to determine value type?
     /* eslint-disable indent */
     newModuleContents = `${newModuleContents.slice(0, insertPoint)}
       static get observedAttributes() {
-        return [${[...observedAttributes].map(attr => `'${attr}'`).join(',')}]
+        return [${[...trackingAttrs].map(attr => `'${attr}'`).join()}]
       }
 
       attributeChangedCallback(name, oldValue, newValue) {
@@ -356,7 +384,7 @@ export function parseJsx(moduleURL) {
         }
         if (newValue !== oldValue) {
           switch(name) {
-            ${observedAttributes.map((attr) => {
+            ${trackingAttrs.map((attr) => {
               return `
                 case '${attr}':
                   this.${attr} = getValue(newValue);
@@ -389,7 +417,6 @@ export function parseJsx(moduleURL) {
               el.textContent = el.textContent.replace(needle, newValue);
               break;
             case 'attr':
-              console.debug(el.hasAttribute(attr))
               if (el.hasAttribute(el.getAttribute(attr))) {
                 el.setAttribute(el.getAttribute(attr), newValue);
               }
@@ -397,8 +424,13 @@ export function parseJsx(moduleURL) {
           }
         })
 
+        if ([${[...trackingAttrs].map(attr => `'${attr}'`).join()}].includes(name)) {
+          ${derivedSetters}
+        }
         console.debug('****************************');
       }
+
+      ${derivedGetters}
 
       ${newModuleContents.slice(insertPoint)}
     `;
