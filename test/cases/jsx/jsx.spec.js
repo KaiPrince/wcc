@@ -70,7 +70,8 @@ describe('Run WCC For ', function() {
         it('should handle an assignment expression with implicit reactivity using this.render', () => {
           const element = Array.from(buttons).find(button => button.getAttribute('id') === 'evt-assignment');
 
-          expect(element.getAttribute('onclick')).to.be.equal('this.parentElement.parentElement.count-=1; this.parentElement.parentElement.setAttribute(\'count\', this.parentElement.parentElement.count);');
+          expect(element.getAttribute('onclick'))
+            .to.be.equal('this.parentElement.parentElement.count-=1; this.parentElement.parentElement.setAttribute(\'count\', this.parentElement.parentElement.count);');
         });
       });
 
