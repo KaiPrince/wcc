@@ -331,10 +331,10 @@ export default class Counter extends HTMLElement {
   render() {
     const { count } = this;
 
+    // note that {count} has to be wrapped in its own HTML tag
     return (
       <div>
         <button onclick={this.count -= 1}> -</button>
-        <!-- note that {count} has to be wrapped in its own HTML tag -->
         <span>You have clicked <span class="red">{count}</span> times</span>
         <button onclick={this.increment}> +</button>
       </div>
